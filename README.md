@@ -1,2 +1,2 @@
 # Nneoma
-Business Analytics Projects for self-study and learning.
+Business Analytics Projects for self-study, learning, and improvement.
