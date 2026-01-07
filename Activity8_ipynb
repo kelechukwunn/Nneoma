@@ -1,0 +1,1405 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "toc_visible": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Activity 8\n",
+        "\n",
+        "* Download the Activity8 lab and upload it onto Google Colab.\n",
+        "* Answer the Activity8 questions in Canvas and populate the cells below\n",
+        "* Submit Activity8 questions on Canvas and upload the PDF version of this lab:\n",
+        ">* To submit the this lab as PDF, go to File, click Print, then save it as PDF instead of printing it"
+      ],
+      "metadata": {
+        "id": "fcURMgfW0Ky5"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Business Problem\n",
+        "\n",
+        "Henry Hill is the Director of Operations Analytics at a luxury handbag company and has hired you to perform prescriptive analytics to make decisions about three new handbags: Handbag A, Handbag B, and Handbag C.\n",
+        "\n",
+        "First, you will use decision analysis to choose which of the 3 handbags to produce based on different decision strategies, with and without probability information. Then, after the success of your initial production choice, you will use linear programming to find the optimal mix of handbags to produce to maximize revenue."
+      ],
+      "metadata": {
+        "id": "b34M4_26UOp3"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Import Packages"
+      ],
+      "metadata": {
+        "id": "kxVzIDwK6bS3"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!pip install pulp"
+      ],
+      "metadata": {
+        "id": "hIj0hIjK9nmw",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "45dee99e-71a4-4592-f968-a057683d705e"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting pulp\n",
+            "  Downloading pulp-3.3.0-py3-none-any.whl.metadata (8.4 kB)\n",
+            "Downloading pulp-3.3.0-py3-none-any.whl (16.4 MB)\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m16.4/16.4 MB\u001b[0m \u001b[31m28.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25hInstalling collected packages: pulp\n",
+            "Successfully installed pulp-3.3.0\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "GftXbqbUoPPi"
+      },
+      "outputs": [],
+      "source": [
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "from pulp import LpMaximize, LpProblem, LpStatus, lpSum, LpVariable"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Part 1: Decision Analysis"
+      ],
+      "metadata": {
+        "id": "oZIGRf6XG8j2"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Data"
+      ],
+      "metadata": {
+        "id": "sQ5SRGZr6iSK"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "You want to determine which handbag (Handbag A, Handbag B, or Handbag C) to sell to generate the most revenue. Handbag A sells for 100, Handbag B sells for 200, and Handbag C sells for 375.\n",
+        "\n",
+        "You believe demand for Handbag A will be between 0 and 200 bags, demand for Handbag B will be between 0 and 100 bags, and demand for Handbag C will be between 0 and 50 bags.\n",
+        "\n",
+        "You will simulate demand for 100 possible outcomes and use the minimum, average, and maximum values to create a payoff table of the worst case, most likely, and best case demand (and revenue) for each handbag."
+      ],
+      "metadata": {
+        "id": "NuWpD6jgG0oX"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "np.random.seed(123)\n",
+        "\n",
+        "rand_revenue = pd.DataFrame({\n",
+        "   'A':  np.random.randint(0, 200, 100) * 100,\n",
+        "   'B': np.random.randint(0, 100, 100) * 200,\n",
+        "   'C': np.random.randint(0, 50, 100) * 375})\n",
+        "\n",
+        "rand_revenue"
+      ],
+      "metadata": {
+        "id": "ENWh_fhRpm6U",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 424
+        },
+        "collapsed": true,
+        "outputId": "90dfb3cb-9c4d-48b8-8324-c2c66c06fede"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "        A      B      C\n",
+              "0   10900   1800   4125\n",
+              "1   12600  17400   3750\n",
+              "2    6600   2800   1125\n",
+              "3    9800  16600  16875\n",
+              "4    1700  14000   8625\n",
+              "..    ...    ...    ...\n",
+              "95   9800  12400   7875\n",
+              "96    300  13400  12000\n",
+              "97  13900   2200  14625\n",
+              "98    300   5200    375\n",
+              "99    600  18400  12750\n",
+              "\n",
+              "[100 rows x 3 columns]"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-08aaed50-78eb-4fef-9962-66b4834ea70a\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>A</th>\n",
+              "      <th>B</th>\n",
+              "      <th>C</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>10900</td>\n",
+              "      <td>1800</td>\n",
+              "      <td>4125</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>12600</td>\n",
+              "      <td>17400</td>\n",
+              "      <td>3750</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>6600</td>\n",
+              "      <td>2800</td>\n",
+              "      <td>1125</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>9800</td>\n",
+              "      <td>16600</td>\n",
+              "      <td>16875</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>1700</td>\n",
+              "      <td>14000</td>\n",
+              "      <td>8625</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>...</th>\n",
+              "      <td>...</td>\n",
+              "      <td>...</td>\n",
+              "      <td>...</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>95</th>\n",
+              "      <td>9800</td>\n",
+              "      <td>12400</td>\n",
+              "      <td>7875</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>96</th>\n",
+              "      <td>300</td>\n",
+              "      <td>13400</td>\n",
+              "      <td>12000</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>97</th>\n",
+              "      <td>13900</td>\n",
+              "      <td>2200</td>\n",
+              "      <td>14625</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>98</th>\n",
+              "      <td>300</td>\n",
+              "      <td>5200</td>\n",
+              "      <td>375</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>99</th>\n",
+              "      <td>600</td>\n",
+              "      <td>18400</td>\n",
+              "      <td>12750</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "<p>100 rows × 3 columns</p>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-08aaed50-78eb-4fef-9962-66b4834ea70a')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-08aaed50-78eb-4fef-9962-66b4834ea70a button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-08aaed50-78eb-4fef-9962-66b4834ea70a');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    <div id=\"df-a235586d-e404-40d8-bee5-6a7145ba6a11\">\n",
+              "      <button class=\"colab-df-quickchart\" onclick=\"quickchart('df-a235586d-e404-40d8-bee5-6a7145ba6a11')\"\n",
+              "                title=\"Suggest charts\"\n",
+              "                style=\"display:none;\">\n",
+              "\n",
+              "<svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "     width=\"24px\">\n",
+              "    <g>\n",
+              "        <path d=\"M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z\"/>\n",
+              "    </g>\n",
+              "</svg>\n",
+              "      </button>\n",
+              "\n",
+              "<style>\n",
+              "  .colab-df-quickchart {\n",
+              "      --bg-color: #E8F0FE;\n",
+              "      --fill-color: #1967D2;\n",
+              "      --hover-bg-color: #E2EBFA;\n",
+              "      --hover-fill-color: #174EA6;\n",
+              "      --disabled-fill-color: #AAA;\n",
+              "      --disabled-bg-color: #DDD;\n",
+              "  }\n",
+              "\n",
+              "  [theme=dark] .colab-df-quickchart {\n",
+              "      --bg-color: #3B4455;\n",
+              "      --fill-color: #D2E3FC;\n",
+              "      --hover-bg-color: #434B5C;\n",
+              "      --hover-fill-color: #FFFFFF;\n",
+              "      --disabled-bg-color: #3B4455;\n",
+              "      --disabled-fill-color: #666;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart {\n",
+              "    background-color: var(--bg-color);\n",
+              "    border: none;\n",
+              "    border-radius: 50%;\n",
+              "    cursor: pointer;\n",
+              "    display: none;\n",
+              "    fill: var(--fill-color);\n",
+              "    height: 32px;\n",
+              "    padding: 0;\n",
+              "    width: 32px;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart:hover {\n",
+              "    background-color: var(--hover-bg-color);\n",
+              "    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "    fill: var(--button-hover-fill-color);\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart-complete:disabled,\n",
+              "  .colab-df-quickchart-complete:disabled:hover {\n",
+              "    background-color: var(--disabled-bg-color);\n",
+              "    fill: var(--disabled-fill-color);\n",
+              "    box-shadow: none;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-spinner {\n",
+              "    border: 2px solid var(--fill-color);\n",
+              "    border-color: transparent;\n",
+              "    border-bottom-color: var(--fill-color);\n",
+              "    animation:\n",
+              "      spin 1s steps(1) infinite;\n",
+              "  }\n",
+              "\n",
+              "  @keyframes spin {\n",
+              "    0% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "      border-left-color: var(--fill-color);\n",
+              "    }\n",
+              "    20% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    30% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    40% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    60% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    80% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "    90% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "  }\n",
+              "</style>\n",
+              "\n",
+              "      <script>\n",
+              "        async function quickchart(key) {\n",
+              "          const quickchartButtonEl =\n",
+              "            document.querySelector('#' + key + ' button');\n",
+              "          quickchartButtonEl.disabled = true;  // To prevent multiple clicks.\n",
+              "          quickchartButtonEl.classList.add('colab-df-spinner');\n",
+              "          try {\n",
+              "            const charts = await google.colab.kernel.invokeFunction(\n",
+              "                'suggestCharts', [key], {});\n",
+              "          } catch (error) {\n",
+              "            console.error('Error during call to suggestCharts:', error);\n",
+              "          }\n",
+              "          quickchartButtonEl.classList.remove('colab-df-spinner');\n",
+              "          quickchartButtonEl.classList.add('colab-df-quickchart-complete');\n",
+              "        }\n",
+              "        (() => {\n",
+              "          let quickchartButtonEl =\n",
+              "            document.querySelector('#df-a235586d-e404-40d8-bee5-6a7145ba6a11 button');\n",
+              "          quickchartButtonEl.style.display =\n",
+              "            google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "        })();\n",
+              "      </script>\n",
+              "    </div>\n",
+              "\n",
+              "  <div id=\"id_79dc8dbe-339d-479d-bb72-6a5c4a4dfa08\">\n",
+              "    <style>\n",
+              "      .colab-df-generate {\n",
+              "        background-color: #E8F0FE;\n",
+              "        border: none;\n",
+              "        border-radius: 50%;\n",
+              "        cursor: pointer;\n",
+              "        display: none;\n",
+              "        fill: #1967D2;\n",
+              "        height: 32px;\n",
+              "        padding: 0 0 0 0;\n",
+              "        width: 32px;\n",
+              "      }\n",
+              "\n",
+              "      .colab-df-generate:hover {\n",
+              "        background-color: #E2EBFA;\n",
+              "        box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "        fill: #174EA6;\n",
+              "      }\n",
+              "\n",
+              "      [theme=dark] .colab-df-generate {\n",
+              "        background-color: #3B4455;\n",
+              "        fill: #D2E3FC;\n",
+              "      }\n",
+              "\n",
+              "      [theme=dark] .colab-df-generate:hover {\n",
+              "        background-color: #434B5C;\n",
+              "        box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "        filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "        fill: #FFFFFF;\n",
+              "      }\n",
+              "    </style>\n",
+              "    <button class=\"colab-df-generate\" onclick=\"generateWithVariable('rand_revenue')\"\n",
+              "            title=\"Generate code using this dataframe.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M7,19H8.4L18.45,9,17,7.55,7,17.6ZM5,21V16.75L18.45,3.32a2,2,0,0,1,2.83,0l1.4,1.43a1.91,1.91,0,0,1,.58,1.4,1.91,1.91,0,0,1-.58,1.4L9.25,21ZM18.45,9,17,7.55Zm-12,3A5.31,5.31,0,0,0,4.9,8.1,5.31,5.31,0,0,0,1,6.5,5.31,5.31,0,0,0,4.9,4.9,5.31,5.31,0,0,0,6.5,1,5.31,5.31,0,0,0,8.1,4.9,5.31,5.31,0,0,0,12,6.5,5.46,5.46,0,0,0,6.5,12Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "    <script>\n",
+              "      (() => {\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#id_79dc8dbe-339d-479d-bb72-6a5c4a4dfa08 button.colab-df-generate');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      buttonEl.onclick = () => {\n",
+              "        google.colab.notebook.generateWithVariable('rand_revenue');\n",
+              "      }\n",
+              "      })();\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "rand_revenue",
+              "summary": "{\n  \"name\": \"rand_revenue\",\n  \"rows\": 100,\n  \"fields\": [\n    {\n      \"column\": \"A\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 5411,\n        \"min\": 100,\n        \"max\": 19900,\n        \"num_unique_values\": 83,\n        \"samples\": [\n          9900,\n          10900,\n          19500\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"B\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 5901,\n        \"min\": 0,\n        \"max\": 19800,\n        \"num_unique_values\": 67,\n        \"samples\": [\n          8800,\n          1000,\n          14000\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"C\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 5574,\n        \"min\": 375,\n        \"max\": 18375,\n        \"num_unique_values\": 42,\n        \"samples\": [\n          12000,\n          1500,\n          13125\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 3
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "payoff_table = pd.DataFrame({'Worst_Case': rand_revenue.min(),\n",
+        "                             'Most_Likely': rand_revenue.mean(),\n",
+        "                             'Best_Case': rand_revenue.max()})\n",
+        "\n",
+        "payoff_table"
+      ],
+      "metadata": {
+        "id": "tINioKMBvDNi",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 143
+        },
+        "outputId": "9c007d84-d8a0-40b2-b0a1-0de1d73d131c"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "   Worst_Case  Most_Likely  Best_Case\n",
+              "A         100      9721.00      19900\n",
+              "B           0     10192.00      19800\n",
+              "C         375      9273.75      18375"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-64f1858f-57d5-4e2a-a9b9-24134c45de1f\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Worst_Case</th>\n",
+              "      <th>Most_Likely</th>\n",
+              "      <th>Best_Case</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>A</th>\n",
+              "      <td>100</td>\n",
+              "      <td>9721.00</td>\n",
+              "      <td>19900</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>B</th>\n",
+              "      <td>0</td>\n",
+              "      <td>10192.00</td>\n",
+              "      <td>19800</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>C</th>\n",
+              "      <td>375</td>\n",
+              "      <td>9273.75</td>\n",
+              "      <td>18375</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-64f1858f-57d5-4e2a-a9b9-24134c45de1f')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-64f1858f-57d5-4e2a-a9b9-24134c45de1f button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-64f1858f-57d5-4e2a-a9b9-24134c45de1f');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    <div id=\"df-4db63d13-bd9d-4a05-96a0-de92e4bca49f\">\n",
+              "      <button class=\"colab-df-quickchart\" onclick=\"quickchart('df-4db63d13-bd9d-4a05-96a0-de92e4bca49f')\"\n",
+              "                title=\"Suggest charts\"\n",
+              "                style=\"display:none;\">\n",
+              "\n",
+              "<svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "     width=\"24px\">\n",
+              "    <g>\n",
+              "        <path d=\"M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z\"/>\n",
+              "    </g>\n",
+              "</svg>\n",
+              "      </button>\n",
+              "\n",
+              "<style>\n",
+              "  .colab-df-quickchart {\n",
+              "      --bg-color: #E8F0FE;\n",
+              "      --fill-color: #1967D2;\n",
+              "      --hover-bg-color: #E2EBFA;\n",
+              "      --hover-fill-color: #174EA6;\n",
+              "      --disabled-fill-color: #AAA;\n",
+              "      --disabled-bg-color: #DDD;\n",
+              "  }\n",
+              "\n",
+              "  [theme=dark] .colab-df-quickchart {\n",
+              "      --bg-color: #3B4455;\n",
+              "      --fill-color: #D2E3FC;\n",
+              "      --hover-bg-color: #434B5C;\n",
+              "      --hover-fill-color: #FFFFFF;\n",
+              "      --disabled-bg-color: #3B4455;\n",
+              "      --disabled-fill-color: #666;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart {\n",
+              "    background-color: var(--bg-color);\n",
+              "    border: none;\n",
+              "    border-radius: 50%;\n",
+              "    cursor: pointer;\n",
+              "    display: none;\n",
+              "    fill: var(--fill-color);\n",
+              "    height: 32px;\n",
+              "    padding: 0;\n",
+              "    width: 32px;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart:hover {\n",
+              "    background-color: var(--hover-bg-color);\n",
+              "    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "    fill: var(--button-hover-fill-color);\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart-complete:disabled,\n",
+              "  .colab-df-quickchart-complete:disabled:hover {\n",
+              "    background-color: var(--disabled-bg-color);\n",
+              "    fill: var(--disabled-fill-color);\n",
+              "    box-shadow: none;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-spinner {\n",
+              "    border: 2px solid var(--fill-color);\n",
+              "    border-color: transparent;\n",
+              "    border-bottom-color: var(--fill-color);\n",
+              "    animation:\n",
+              "      spin 1s steps(1) infinite;\n",
+              "  }\n",
+              "\n",
+              "  @keyframes spin {\n",
+              "    0% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "      border-left-color: var(--fill-color);\n",
+              "    }\n",
+              "    20% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    30% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    40% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    60% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    80% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "    90% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "  }\n",
+              "</style>\n",
+              "\n",
+              "      <script>\n",
+              "        async function quickchart(key) {\n",
+              "          const quickchartButtonEl =\n",
+              "            document.querySelector('#' + key + ' button');\n",
+              "          quickchartButtonEl.disabled = true;  // To prevent multiple clicks.\n",
+              "          quickchartButtonEl.classList.add('colab-df-spinner');\n",
+              "          try {\n",
+              "            const charts = await google.colab.kernel.invokeFunction(\n",
+              "                'suggestCharts', [key], {});\n",
+              "          } catch (error) {\n",
+              "            console.error('Error during call to suggestCharts:', error);\n",
+              "          }\n",
+              "          quickchartButtonEl.classList.remove('colab-df-spinner');\n",
+              "          quickchartButtonEl.classList.add('colab-df-quickchart-complete');\n",
+              "        }\n",
+              "        (() => {\n",
+              "          let quickchartButtonEl =\n",
+              "            document.querySelector('#df-4db63d13-bd9d-4a05-96a0-de92e4bca49f button');\n",
+              "          quickchartButtonEl.style.display =\n",
+              "            google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "        })();\n",
+              "      </script>\n",
+              "    </div>\n",
+              "\n",
+              "  <div id=\"id_e92c0d53-fc54-4d09-b17d-09236e2f40ff\">\n",
+              "    <style>\n",
+              "      .colab-df-generate {\n",
+              "        background-color: #E8F0FE;\n",
+              "        border: none;\n",
+              "        border-radius: 50%;\n",
+              "        cursor: pointer;\n",
+              "        display: none;\n",
+              "        fill: #1967D2;\n",
+              "        height: 32px;\n",
+              "        padding: 0 0 0 0;\n",
+              "        width: 32px;\n",
+              "      }\n",
+              "\n",
+              "      .colab-df-generate:hover {\n",
+              "        background-color: #E2EBFA;\n",
+              "        box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "        fill: #174EA6;\n",
+              "      }\n",
+              "\n",
+              "      [theme=dark] .colab-df-generate {\n",
+              "        background-color: #3B4455;\n",
+              "        fill: #D2E3FC;\n",
+              "      }\n",
+              "\n",
+              "      [theme=dark] .colab-df-generate:hover {\n",
+              "        background-color: #434B5C;\n",
+              "        box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "        filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "        fill: #FFFFFF;\n",
+              "      }\n",
+              "    </style>\n",
+              "    <button class=\"colab-df-generate\" onclick=\"generateWithVariable('payoff_table')\"\n",
+              "            title=\"Generate code using this dataframe.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M7,19H8.4L18.45,9,17,7.55,7,17.6ZM5,21V16.75L18.45,3.32a2,2,0,0,1,2.83,0l1.4,1.43a1.91,1.91,0,0,1,.58,1.4,1.91,1.91,0,0,1-.58,1.4L9.25,21ZM18.45,9,17,7.55Zm-12,3A5.31,5.31,0,0,0,4.9,8.1,5.31,5.31,0,0,0,1,6.5,5.31,5.31,0,0,0,4.9,4.9,5.31,5.31,0,0,0,6.5,1,5.31,5.31,0,0,0,8.1,4.9,5.31,5.31,0,0,0,12,6.5,5.46,5.46,0,0,0,6.5,12Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "    <script>\n",
+              "      (() => {\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#id_e92c0d53-fc54-4d09-b17d-09236e2f40ff button.colab-df-generate');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      buttonEl.onclick = () => {\n",
+              "        google.colab.notebook.generateWithVariable('payoff_table');\n",
+              "      }\n",
+              "      })();\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "payoff_table",
+              "summary": "{\n  \"name\": \"payoff_table\",\n  \"rows\": 3,\n  \"fields\": [\n    {\n      \"column\": \"Worst_Case\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 194,\n        \"min\": 0,\n        \"max\": 375,\n        \"num_unique_values\": 3,\n        \"samples\": [\n          100,\n          0,\n          375\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Most_Likely\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 459.17618713662984,\n        \"min\": 9273.75,\n        \"max\": 10192.0,\n        \"num_unique_values\": 3,\n        \"samples\": [\n          9721.0,\n          10192.0,\n          9273.75\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Best_Case\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 853,\n        \"min\": 18375,\n        \"max\": 19900,\n        \"num_unique_values\": 3,\n        \"samples\": [\n          19900,\n          19800,\n          18375\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 4
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q1\n",
+        "\n",
+        "* Run the code cell below to obtain the maximum revenue for each handbag.\n",
+        "* Based on the output, using an optimistic strategy you should manufacture Handbag _____?\n",
+        "* Select the right answer from Canvas. \"A\""
+      ],
+      "metadata": {
+        "id": "N7ELGhTswPSa"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "payoff_table.max(axis = 1)"
+      ],
+      "metadata": {
+        "id": "RjEnyVg2wRhr",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 178
+        },
+        "outputId": "4db08b26-259c-49f6-97a5-55093d1a49f3"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "A    19900.0\n",
+              "B    19800.0\n",
+              "C    18375.0\n",
+              "dtype: float64"
+            ],
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>0</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>A</th>\n",
+              "      <td>19900.0</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>B</th>\n",
+              "      <td>19800.0</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>C</th>\n",
+              "      <td>18375.0</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div><br><label><b>dtype:</b> float64</label>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 5
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q2\n",
+        "\n",
+        "* Run the code cell below to obtain the minimum revenue for each handbag.\n",
+        "* Based on the output, using an pessimistic strategy you should manufacture Handbag _____?\n",
+        "* Select the right answer from Canvas. \"C\""
+      ],
+      "metadata": {
+        "id": "wAAvU1O_VkY3"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "payoff_table.min(axis = 1)"
+      ],
+      "metadata": {
+        "id": "Vv6DVBvfwltj",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 178
+        },
+        "outputId": "390aea10-3768-4483-95e7-ab4c416c4f8b"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "A    100.0\n",
+              "B      0.0\n",
+              "C    375.0\n",
+              "dtype: float64"
+            ],
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>0</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>A</th>\n",
+              "      <td>100.0</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>B</th>\n",
+              "      <td>0.0</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>C</th>\n",
+              "      <td>375.0</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div><br><label><b>dtype:</b> float64</label>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 6
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q3\n",
+        "\n",
+        "* Run the code cell below to obtain the best payoff for each outcome and create the opportunity loss matrix\n",
+        "* Based on the output, using an opportunity loss strategy you should manufacture Handbag _____?\n",
+        "* Select the right answer from Canvas. \"B\""
+      ],
+      "metadata": {
+        "id": "IDtep9zSw72C"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "best_outcomes = payoff_table.max(axis = 0)\n",
+        "print('best outcomes')\n",
+        "print(best_outcomes)\n",
+        "print('')\n",
+        "opp_loss = pd.DataFrame({'Worst_Case': best_outcomes.iloc[0] - payoff_table.iloc[:,0],\n",
+        "                             'Most_Likely': best_outcomes.iloc[1] - payoff_table.iloc[:,1],\n",
+        "                             'Best_Case': best_outcomes.iloc[2] - payoff_table.iloc[:,2]})\n",
+        "print('opportunity loss matrix')\n",
+        "print(opp_loss)\n",
+        "print('')\n",
+        "print('maximum opportunity loss')\n",
+        "print(opp_loss.max(axis = 1))"
+      ],
+      "metadata": {
+        "id": "ZF6FRrALw9ln",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "556011c0-be18-4f6d-e78a-403a4583a358"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "best outcomes\n",
+            "Worst_Case       375.0\n",
+            "Most_Likely    10192.0\n",
+            "Best_Case      19900.0\n",
+            "dtype: float64\n",
+            "\n",
+            "opportunity loss matrix\n",
+            "   Worst_Case  Most_Likely  Best_Case\n",
+            "A       275.0       471.00        0.0\n",
+            "B       375.0         0.00      100.0\n",
+            "C         0.0       918.25     1525.0\n",
+            "\n",
+            "maximum opportunity loss\n",
+            "A     471.0\n",
+            "B     375.0\n",
+            "C    1525.0\n",
+            "dtype: float64\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q4\n",
+        "\n",
+        "* Which of the following code lines should you use to output the average payoff for each handbag?\n",
+        "* Select the right answer from Canvas, paste it below, and run the cell"
+      ],
+      "metadata": {
+        "id": "984fleIIWzw0"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Copy and paste your answer from Canvas to Here\n",
+        "\n",
+        "print(payoff_table.mean(axis = 1))"
+      ],
+      "metadata": {
+        "id": "KChFOla8W7YU",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "ce06421a-db8e-45e6-ac76-4f6c1c5651ab"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "A    9907.000000\n",
+            "B    9997.333333\n",
+            "C    9341.250000\n",
+            "dtype: float64\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q5\n",
+        "\n",
+        "* No code needed.\n",
+        "* Select the right answer in Canvas."
+      ],
+      "metadata": {
+        "id": "d4nvvOPdXMg5"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q6\n",
+        "\n",
+        "* Run the code cell below to obtain the expected value payoffs where the worst case outcome occurs with 60% probability, the most likely outcome occurs with 20% probability and the best case outcome occurs with 20% probability.\n",
+        "* Based on the output, using an expected value strategy you should manufacture Handbag _____?\n",
+        "* Select the right answer from Canvas."
+      ],
+      "metadata": {
+        "id": "foIJCQABXRMR"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "exp_val = pd.DataFrame({'Worst_Case': payoff_table.iloc[:,0] * .6,\n",
+        "                             'Most_Likely': payoff_table.iloc[:,1]* .2,\n",
+        "                             'Best_Case': payoff_table.iloc[:,2]* .2})\n",
+        "print('expected value payoffs')\n",
+        "print(exp_val.sum(axis = 1))"
+      ],
+      "metadata": {
+        "id": "q0m7lI05Xat3",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "4a9e174c-e3fa-4aa2-f100-d0a91820d032"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "expected value payoffs\n",
+            "A    5984.20\n",
+            "B    5998.40\n",
+            "C    5754.75\n",
+            "dtype: float64\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Part 2: Linear Optimization"
+      ],
+      "metadata": {
+        "id": "pb_1G8jJ6Ga3"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Data"
+      ],
+      "metadata": {
+        "id": "A5LkEUn9HODc"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "After success with your manufacturing decision using Decision Analysis, Henry decides to produce all three handbags, but needs you to identify the optimal number of each handbag to produce to maximize revenue given production constraints.\n",
+        "\n",
+        "Handbag A sells for 100, Handbag B sells for 200, and Handbag C sells for 375.\n",
+        "\n",
+        "You are limited in the amount of leather, buttons, and zippers available for production. You can use at most 100 yards of leather at most. Handbag A requires 0.8 yards, Handbag B requires 2 yards, and handbag C requires 4.5 yards. You have 500 buttons available to use. Handbag A uses 7 buttons, Handbag B uses 8 buttons, and Handbag C uses 5 buttons. You have 400 zippers available to use. Handbag A requires 5 zippers, Handbag B requires 8 zippers, and Handbag C requires 7 zippers. Due to capacity limitations, at most, you can produce a total of 150 handbag."
+      ],
+      "metadata": {
+        "id": "MnI6CfJDA3zM"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q7\n",
+        "\n",
+        "* Run the code cell below to set up the linear programming problem.\n",
+        "* Based on the description of the business problem and the output, the constraint on the number of buttons is __________________.\n",
+        "* Select the right answer from Canvas."
+      ],
+      "metadata": {
+        "id": "mS9mpoLeY7of"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "\n",
+        "model = LpProblem(name = \"max_revenue\", sense = LpMaximize)\n",
+        "x = LpVariable(name = \"A\", lowBound = 0)\n",
+        "y = LpVariable(name = \"B\", lowBound = 0)\n",
+        "z = LpVariable(name = \"C\", lowBound = 0)\n",
+        "model += 100 * x + 200 * y + 375 * z\n",
+        "model += (.8 * x + 2 * y + 4.5 * z <= 100, \"leather\")\n",
+        "model += (7 * x + 8 * y + 5 * z <= 500, \"buttons\")\n",
+        "model += (5 * x + 8  * y + 7 * z <= 400, \"zippers\")\n",
+        "model += (x + y + z <= 150, \"total_bags\")\n",
+        "model"
+      ],
+      "metadata": {
+        "id": "VF2XKzUqDjiv",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "bdd7a04b-1a56-4d7a-dd14-da6eeb859efd"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "max_revenue:\n",
+              "MAXIMIZE\n",
+              "100*A + 200*B + 375*C + 0\n",
+              "SUBJECT TO\n",
+              "leather: 0.8 A + 2 B + 4.5 C <= 100\n",
+              "\n",
+              "buttons: 7 A + 8 B + 5 C <= 500\n",
+              "\n",
+              "zippers: 5 A + 8 B + 7 C <= 400\n",
+              "\n",
+              "total_bags: A + B + C <= 150\n",
+              "\n",
+              "VARIABLES\n",
+              "A Continuous\n",
+              "B Continuous\n",
+              "C Continuous"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 10
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q8\n",
+        "\n",
+        "* Which of the following code lines should you use to solve the linear programming problem?\n",
+        "* Select the right answer from Canvas, paste it below, and run the cell"
+      ],
+      "metadata": {
+        "id": "RIa56hvsY0in"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Copy and paste your answer from Canvas to Here\n",
+        "\n",
+        "model_sol = model.solve()"
+      ],
+      "metadata": {
+        "id": "RCO5SiTmEJuP"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q9\n",
+        "\n",
+        "* Run the code cell below to output the optimal values of the decision variables and objective function.\n",
+        "* Based on the output, how many of handbag A should you produce?\n",
+        "* Select the right answer from Canvas."
+      ],
+      "metadata": {
+        "id": "K-WdbTCKZlrg"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# do not manipluate this cell - just run it\n",
+        "print(\"Total Revenue \", model.objective.value())\n",
+        "\n",
+        "for var in model.variables():\n",
+        "    print(var.name, \"=\", var.varValue)"
+      ],
+      "metadata": {
+        "id": "fkPm2jpYEMOR",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "40b3e0fd-dc5f-4313-9525-0771988c8c02"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Total Revenue  10461.956562500001\n",
+            "A = 59.782609\n",
+            "B = 4.076087\n",
+            "C = 9.7826087\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Q10\n",
+        "\n",
+        "* No code needed.\n",
+        "* Select the right answer in Canvas."
+      ],
+      "metadata": {
+        "id": "qJZKVzYGaJrf"
+      }
+    }
+  ]
+}
